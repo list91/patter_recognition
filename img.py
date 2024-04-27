@@ -62,11 +62,11 @@ def match_template_explicit(large_image_path, dataset_directory, threshold=0.8):
     return results
 
 
-directory_path = "vis/datasets"  # Укажите путь к вашей директории
+# directory_path = "vis/datasets"  # Укажите путь к вашей директории
     
-# Пример использования функции:C:\Users\ssdwq\Downloads\Telegram Desktop\vis\vis\extracted_imagesMarker\2024_04_24_0pp_Kleki.png
-large_image_path = "vis/extracted_imagesMarker/2024_04_24_0pp_Kleki.png"  # Укажите путь к вашему большому изображению
-dataset_directory = directory_path  # Укажите путь к директории с датасетом
-found_matches = match_template_explicit(large_image_path, dataset_directory)
-for i in found_matches:
-    print(i)
+# # Пример использования функции:C:\Users\ssdwq\Downloads\Telegram Desktop\vis\vis\extracted_imagesMarker\2024_04_24_0pp_Kleki.png
+# large_image_path = "vis/extracted_imagesMarker/2024_04_24_0pp_Kleki.png"  # Укажите путь к вашему большому изображению
+# dataset_directory = directory_path  # Укажите путь к директории с датасетом
+# found_matches = match_template_explicit(large_image_path, dataset_directory)
+# for i in found_matches:
+#     print(i)
