@@ -16,6 +16,7 @@ class Perceptron:
         return x * (1 - x)
 
     def train(self, input_data, target_output, learning_rate, epochs):
+        # print(i)
         for epoch in range(epochs):
             # Forward pass
             hidden_input = np.dot(input_data, self.weights_input_hidden) + self.bias_hidden
@@ -60,7 +61,8 @@ for i in file_list:
 
     perceptron.train(image_flattened, truth_value, learning_rate=0.01, epochs=10)
 
-test_image = cv2.imread(file_list[2])
+test_image = cv2.imread("tests/dataset1.png")
+# test_image = cv2.imread(file_list[2])
 test_image_rgb = cv2.cvtColor(test_image, cv2.COLOR_BGR2RGB)
 test_image_normalized = test_image_rgb / 255.0
 test_image_flattened = test_image_normalized.flatten().reshape(1, -1)
