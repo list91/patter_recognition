@@ -41,7 +41,6 @@ class Perceptron:
         final_output = self.sigmoid(np.dot(hidden_output, self.weights_hidden_output) + self.bias_output)
         return final_output
 
-
 input_size = 22 * 36 * 3  # Size of the input layer, 22x36 image, 3 channels (RGB)
 hidden_size = 1000  # Size of the hidden layer
 
