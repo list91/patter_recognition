@@ -13,21 +13,28 @@ def main(i, j):
     diff = cv2.absdiff(img1, img2)
 
     # Пороговая обработка для выделения изменений
-    _, thresh = cv2.threshold(diff, 35, 255, cv2.THRESH_BINARY)
+    _, thresh = cv2.threshold(diff, 20, 255, cv2.THRESH_BINARY)
 
-    # Используем пороговое изображение как маску для выделения объекта
-    masked_img = np.zeros_like(img1)
-    masked_img[thresh != 0] = img1[thresh != 0]
+    # Находим контуры на пороговом изображении
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    # Фон делаем белым
-    masked_img[thresh == 0] = 255
+    # Ищем контур с наибольшей площадью
+    max_contour = max(contours, key=cv2.contourArea)
+    
+    # Получаем координаты ограничивающего прямоугольника
+    x, y, w, h = cv2.boundingRect(max_contour)
 
-    # Отображение или сохранение результата
-    cv2.imshow('Detected Object', masked_img)
-    # cv2.imshow('Detected Object', img2)
+    # Рисуем зелёный прямоугольник на исходном изображении img1
+    result_img = cv2.cvtColor(img1, cv2.COLOR_GRAY2BGR)
+    cv2.rectangle(result_img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+    # Отображаем результат
+    cv2.imshow('Detected Object', result_img)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-main("1","clear")
-main("2","3")
-main("4","2")
+main("3", "clear")
+main("4", "clear")
+# main("1", "clear")
+# main("2", "3")
+main("4", "2")
