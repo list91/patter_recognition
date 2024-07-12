@@ -18,6 +18,12 @@ def main(i, j):
     # Находим контуры на пороговом изображении
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
+    masked_img = np.zeros_like(img1)
+    masked_img[thresh != 0] = img1[thresh != 0]
+
+    # Фон делаем белым
+    masked_img[thresh == 0] = 255
+
     # Ищем контур с наибольшей площадью
     max_contour = max(contours, key=cv2.contourArea)
     
@@ -25,10 +31,13 @@ def main(i, j):
     x, y, w, h = cv2.boundingRect(max_contour)
 
     # Рисуем зелёный прямоугольник на исходном изображении img1
-    result_img = cv2.cvtColor(img1, cv2.COLOR_GRAY2BGR)
+    result_img = cv2.cvtColor(masked_img, cv2.COLOR_GRAY2BGR)
     cv2.rectangle(result_img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+    # result_img = cv2.cvtColor(img1, cv2.COLOR_GRAY2BGR)
+    # cv2.rectangle(result_img, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
     # Отображаем результат
+    # cv2.imshow('Detected Object', thresh)
     cv2.imshow('Detected Object', result_img)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
