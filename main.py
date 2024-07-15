@@ -1,49 +1,81 @@
+import detect
+
+detect.main("1", "2")
+# detect.main("4", "clear")
+# detect.main("1", "clear")
+# detect.main("2", "3")
+# detect.main("4", "2")
+
 import cv2
 import numpy as np
 
-def main(i, j):
-    img1 = cv2.imread(f'src\\detect_datasets\\1\\{i}.jpg', 0)
-    img2 = cv2.imread(f'src\\detect_datasets\\1\\{j}.jpg', 0)
-
-    # Применение медианного фильтра
-    # img1 = cv2.medianBlur(img1, 5)
-    # img2 = cv2.medianBlur(img2, 5)
-
-    # Вычисление разности
-    diff = cv2.absdiff(img1, img2)
-
-    # Пороговая обработка для выделения изменений
-    _, thresh = cv2.threshold(diff, 20, 255, cv2.THRESH_BINARY)
-
-    # Находим контуры на пороговом изображении
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    masked_img = np.zeros_like(img1)
-    masked_img[thresh != 0] = img1[thresh != 0]
-
-    # Фон делаем белым
-    masked_img[thresh == 0] = 255
-
-    # Ищем контур с наибольшей площадью
-    max_contour = max(contours, key=cv2.contourArea)
+def load_grayscale_image_as_np(path):
+    try:
+        # Загрузка изображения с использованием OpenCV
+        image = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+        
+        if image is None:
+            raise FileNotFoundError(f"Не удалось загрузить изображение по пути: {path}")
+        
+        # Преобразование изображения в NumPy массив
+        image_np = np.array(image)
+        
+        return image_np
     
-    # Получаем координаты ограничивающего прямоугольника
-    x, y, w, h = cv2.boundingRect(max_contour)
+    except Exception as e:
+        print(f"Ошибка при загрузке изображения: {e}")
+        return None
 
-    # Рисуем зелёный прямоугольник на исходном изображении img1
-    result_img = cv2.cvtColor(masked_img, cv2.COLOR_GRAY2BGR)
-    cv2.rectangle(result_img, (x, y), (x + w, y + h), (0, 255, 0), 2)
-    # result_img = cv2.cvtColor(img1, cv2.COLOR_GRAY2BGR)
-    # cv2.rectangle(result_img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+import matplotlib.pyplot as plt
+def crop_array(array, start_row, end_row, start_col, end_col):
+    cropped_array = array[start_row:end_row, start_col:end_col]
+    return cropped_array
+def show_image_from_array(image_array):
+    # Создаем изображение из массива NumPy
+    plt.imshow(image_array, cmap='gray')
+    plt.axis('off')  # Убираем оси координат
+    plt.show()
+# Пример использования нейронной сети для извлечения признаков из изображения
+def main():
+    grayscale_image_np = load_grayscale_image_as_np("src\\detect_datasets\\1\\1.jpg")
 
-    # Отображаем результат
-    # cv2.imshow('Detected Object', thresh)
-    cv2.imshow('Detected Object', result_img)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    cropped_array = crop_array(grayscale_image_np, 
+                               0, 400, 
+                               0, 400)
+    show_image_from_array(cropped_array)
 
-main("3", "clear")
-main("4", "clear")
-# main("1", "clear")
-# main("2", "3")
-main("4", "2")
+    print(grayscale_image_np.shape[0])
+    print(grayscale_image_np.shape[1])
+
+    feature_map = cropped_array
+
+    # Размер ядра усредняющей свертки 2x2
+    kernel_size = 2
+
+    # Размер выходной карты после усредняющей свертки
+    output_size = feature_map.shape[0] // kernel_size
+
+    # Создадим массив для хранения результата усредняющей свертки
+    smoothed_features = np.zeros((output_size, output_size))
+
+    # Применим усредняющую свертку
+    for i in range(output_size):
+        for j in range(output_size):
+            # Область на карте признаков, на которую применяем усредняющую свертку
+            patch = feature_map[i*kernel_size:(i+1)*kernel_size, j*kernel_size:(j+1)*kernel_size]
+            # Вычисляем среднее значение
+            smoothed_features[i, j] = np.mean(patch)
+
+    # Выводим результаты
+    print("Исходная карта признаков:")
+    print(feature_map)
+    print("\nУменьшенная карта признаков после усредняющей свертки:")
+    print(smoothed_features)
+    print(smoothed_features.shape[0])
+    print(smoothed_features.shape[1])
+    show_image_from_array(smoothed_features)
+
+if __name__ == "__main__":
+    main()
+
+
