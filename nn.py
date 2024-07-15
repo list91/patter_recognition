@@ -1,159 +1,60 @@
+import tensorflow as tf
+import tensorflow_hub as hub
 import numpy as np
-import detect
-# Функция активации - сигмоида
-def sigmoid(x):
-    return 1 / (1 + np.exp(-x))
+import cv2
 
-# Производная функции активации сигмоиды
-def sigmoid_derivative(x):
-    return sigmoid(x) * (1 - sigmoid(x))
+# Загрузка модели из TensorFlow Hub
+model_handle = 'https://tfhub.dev/tensorflow/ssd_mobilenet_v2/2'
+detector = hub.load(model_handle)
 
-# Нейронная сеть класса
-class NeuralNetwork:
-    def __init__(self, input_size, hidden_size, output_size):
-        # Инициализация весов со случайными значениями
-        self.weights_input_hidden = np.random.randn(input_size, hidden_size)
-        self.bias_hidden = np.zeros((1, hidden_size))
-        self.weights_hidden_output = np.random.randn(hidden_size, output_size)
-        self.bias_output = np.zeros((1, output_size))
-        
-    def forward(self, X):
-        # Прямое распространение
-        
-        # Скрытый слой
-        self.hidden_sum = np.dot(X, self.weights_input_hidden) + self.bias_hidden
-        self.hidden_activation = sigmoid(self.hidden_sum)
-        
-        # Выходной слой
-        output_sum = np.dot(self.hidden_activation, self.weights_hidden_output) + self.bias_output
-        output = sigmoid(output_sum)
-        
-        return output
-    
-    def backward(self, X, y, output, learning_rate):
-        # Обратное распространение
-        
-        # Вычисляем градиент для выходного слоя
-        error = y - output
-        output_delta = error * sigmoid_derivative(output)
-        
-        # Обновляем веса и смещения для выходного слоя
-        self.weights_hidden_output += learning_rate * np.dot(self.hidden_activation.T, output_delta)
-        self.bias_output += learning_rate * np.sum(output_delta, axis=0, keepdims=True)
-        
-        # Вычисляем градиент для скрытого слоя
-        hidden_error = np.dot(output_delta, self.weights_hidden_output.T)
-        hidden_delta = hidden_error * sigmoid_derivative(self.hidden_activation)
-        
-        # Обновляем веса и смещения для скрытого слоя
-        self.weights_input_hidden += learning_rate * np.dot(X.T, hidden_delta)
-        self.bias_hidden += learning_rate * np.sum(hidden_delta, axis=0, keepdims=True)
-    
-    def train(self, X, y, epochs, learning_rate):
-        # Обучение нейронной сети
-        for epoch in range(epochs):
-            # Прямое распространение
-            output = self.forward(X)
-            
-            # Обратное распространение и обновление параметров
-            self.backward(X, y, output, learning_rate)
-            
-            # Вычисляем и выводим среднюю ошибку на каждой эпохе (для наглядности)
-            loss = np.mean(np.abs(y - output))
-            if epoch % 1000 == 0:
-                print(f'Epoch {epoch}, Loss: {loss:.4f}')
-    
-    def predict(self, X):
-        # Предсказание на основе текущих весов и смещений
-        return self.forward(X)
+# Получение списка доступных сигнатур модели
+print("Доступные сигнатуры модели:", detector.signatures.keys())
+
+# Выбор сигнатуры для обнаружения объектов
+signature_keys = list(detector.signatures.keys())
+selected_signature_key = signature_keys[0]  # Выбираем первую доступную сигнатуру
+
+# Функция для обработки изображения и обнаружения объектов
+def detect_people(image_path):
+    # Загрузка изображения с диска
+    image = cv2.imread(image_path)
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image_resized = cv2.resize(image_rgb, (300, 300))
+
+    # Преобразование в тензор и добавление размерности пакета
+    input_tensor = tf.convert_to_tensor(image_resized)
+    input_tensor = tf.expand_dims(input_tensor, axis=0)
+    input_tensor = tf.cast(input_tensor, dtype=tf.uint8)
+
+    # Обнаружение объектов на изображении
+    result = detector.signatures[selected_signature_key](input_tensor=input_tensor)
+
+    # Интересующие нас классы и их индексы
+    interesting_classes = ['background', 'person']  # Добавлен 'background' как 0-й класс
+    class_ids = result['detection_classes'][0].numpy()
+    scores = result['detection_scores'][0].numpy()
+    boxes = result['detection_boxes'][0].numpy()
+
+    # Отрисовка результатов на изображении
+    image_with_boxes = image_resized.copy()
+    for i in range(len(class_ids)):
+        class_id = int(class_ids[i])
+        score = scores[i]
+        box = boxes[i]
+
+        if score >= 0.5 and class_id < len(interesting_classes):
+            if interesting_classes[class_id] == 'person':
+                ymin, xmin, ymax, xmax = box
+                left, right, top, bottom = int(xmin * 300), int(xmax * 300), int(ymin * 300), int(ymax * 300)
+                cv2.rectangle(image_with_boxes, (left, top), (right, bottom), (0, 255, 0), 2)
+
+    return image_with_boxes
 
 # Пример использования
+image_path = 'src\\detect_datasets\\1\\5.jpg'  # Замените на реальный путь к вашему изображению
+image_with_boxes = detect_people(image_path)
 
-# Создаем набор данных для обучения (входные данные и соответствующие выходные значения)
-X = np.array([[0, 0],
-              [0, 1],
-              [1, 0],
-              [1, 1]])
-
-y = np.array([[0],
-              [1],
-              [1],
-              [0]])
-
-# Создаем экземпляр нейронной сети
-# input_size = X.shape[1]
-# hidden_size = 4  # количество нейронов в скрытом слое
-# output_size = y.shape[1]
-
-# nn = NeuralNetwork(input_size, hidden_size, output_size)
-
-# # Обучаем нейронную сеть
-# nn.train(X, y, epochs=10000, learning_rate=0.1)
-
-# # Делаем предсказание
-# predictions = nn.predict(X)
-# print("\nFinal predictions:")
-# print(predictions)
-
-
-
-def apply_convolution(kernel, input_matrix):
-    # Размеры входной матрицы
-    in_rows, in_cols = input_matrix.shape
-    
-    # Размеры ядра свертки
-    kernel_rows, kernel_cols = kernel.shape
-    
-    # Размеры выходной матрицы (задаем 50x50)
-    out_rows, out_cols = 100, 100
-    
-    # Шаг свертки (как регулировать шаг, чтобы получить 50x50 матрицу)
-    stride_rows = max((in_rows - kernel_rows) // (out_rows - 1), 1)
-    stride_cols = max((in_cols - kernel_cols) // (out_cols - 1), 1)
-    
-    # Применяем свертку с заданным шагом
-    result = np.zeros((out_rows, out_cols))
-    for i in range(0, out_rows):
-        for j in range(0, out_cols):
-            # Определяем начальные координаты входной матрицы для текущего шага
-            start_row = i * stride_rows
-            start_col = j * stride_cols
-            # Область входной матрицы для текущего шага
-            input_patch = input_matrix[start_row:start_row + kernel_rows, start_col:start_col + kernel_cols]
-            # Применяем свертку
-            result[i, j] = np.sum(input_patch * kernel)
-    
-    return result
-
-# Пример использования функции
-# Создаем матрицу коэффициентов размером 100x100
-# input_matrix = np.random.rand(640, 420)
-
-move_map = detect.get_move_matrix_pixels(
-    'src\\detect_datasets\\1\\1.jpg',
-    'src\\detect_datasets\\1\\2.jpg'
-)
-# print(move_map.shape[1])
-# Создаем ядро свертки размером 3x3
-
-kernel = np.array([[1, 1, 1],
-                   [1, 0, 1],
-                   [1, 1, 1]])
-
-# Применяем свертку и получаем результат размером 50x50
-output_matrix = apply_convolution(kernel, move_map)
-# print(move_map)
-# print(output_matrix)
-# input_size = X.shape[1]
-# hidden_size = 4  # количество нейронов в скрытом слое
-# output_size = y.shape[1]
-
-# nn = NeuralNetwork(input_size, hidden_size, output_size)
-
-# # Обучаем нейронную сеть
-# nn.train(X, y, epochs=10000, learning_rate=0.1)
-
-# # Делаем предсказание
-# predictions = nn.predict(X)
-# print("\nFinal predictions:")
-# print(predictions)
+# Отображение результата
+cv2.imshow('Detected People', image_with_boxes)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
