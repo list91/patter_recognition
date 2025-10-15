@@ -176,7 +176,7 @@ def test_on_train_image(model_path, conf_threshold=0.1, use_grayscale=False):
     print("🔍 ТЕСТИРОВАНИЕ НА ТРЕНИРОВОЧНОМ ИЗОБРАЖЕНИИ")
     print("=" * 70)
 
-    train_image = Path("data/images/train/train_01.jpg")
+    train_image = Path("data/images/train/train_00.jpg")
 
     if not train_image.exists():
         print(f"❌ Тренировочное изображение не найдено: {train_image}")
@@ -194,7 +194,7 @@ def test_on_train_image(model_path, conf_threshold=0.1, use_grayscale=False):
         gray_3ch = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
 
         # Сохраняем временно
-        temp_image = Path("data/images/train/train_01_grayscale_temp.jpg")
+        temp_image = Path("data/images/train/train_00_grayscale_temp.jpg")
         cv2.imwrite(str(temp_image), gray_3ch)
         test_image = temp_image
     else:
