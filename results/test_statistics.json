@@ -1,0 +1,47 @@
+{
+  "model_path": "runs/detect/train/weights/best.pt",
+  "conf_threshold": 0.1,
+  "iou_threshold": 0.45,
+  "total_images": 5,
+  "total_detections": 0,
+  "avg_detections_per_image": 0.0,
+  "images_with_detections": 0,
+  "images_without_detections": 5,
+  "per_image_stats": [
+    {
+      "name": "test_01.jpg",
+      "detections": 0,
+      "avg_conf": 0.0,
+      "max_conf": 0.0,
+      "min_conf": 0.0
+    },
+    {
+      "name": "test_02.jpg",
+      "detections": 0,
+      "avg_conf": 0.0,
+      "max_conf": 0.0,
+      "min_conf": 0.0
+    },
+    {
+      "name": "test_03.jpg",
+      "detections": 0,
+      "avg_conf": 0.0,
+      "max_conf": 0.0,
+      "min_conf": 0.0
+    },
+    {
+      "name": "test_04.jpg",
+      "detections": 0,
+      "avg_conf": 0.0,
+      "max_conf": 0.0,
+      "min_conf": 0.0
+    },
+    {
+      "name": "train_01.jpg",
+      "detections": 0,
+      "avg_conf": 0.0,
+      "max_conf": 0.0,
+      "min_conf": 0.0
+    }
+  ]
+}
