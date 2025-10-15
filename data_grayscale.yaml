@@ -1,0 +1,5 @@
+path: ./data
+train: images/train_grayscale
+val: images/train_grayscale
+nc: 1
+names: ['switch']
