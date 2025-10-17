@@ -117,40 +117,12 @@ def train_model(config):
 
     # Запускаем обучение
     print("⏳ Обучение началось...\n")
+    print("⚠️  ВНИМАНИЕ: Используются встроенные дефолты YOLO (гиперпараметры НЕ передаются)\n")
+
     results = model.train(
         data=data_yaml,
 
-        # Основные параметры
-        epochs=config.get('epochs', 150),
-        imgsz=config.get('imgsz', 1280),
-        batch=config.get('batch', 2),
-
-        # Оптимизатор
-        optimizer=config.get('optimizer', 'auto'),
-        lr0=config.get('lr0', 0.002),
-        lrf=config.get('lrf', 0.01),
-        momentum=config.get('momentum', 0.937),
-        weight_decay=config.get('weight_decay', 0.0005),
-
-        # Аугментации
-        mosaic=config.get('mosaic', 0.0),
-        degrees=config.get('degrees', 0.0),
-        translate=config.get('translate', 0.0),
-        scale=config.get('scale', 0.0),
-        fliplr=config.get('fliplr', 0.0),
-        flipud=config.get('flipud', 0.0),
-        shear=config.get('shear', 0.0),
-        hsv_h=config.get('hsv_h', 0.015),
-        hsv_s=config.get('hsv_s', 0.5),
-        hsv_v=config.get('hsv_v', 0.4),
-
-        # Потери
-        box=config.get('box', 7.5),
-        cls=config.get('cls', 0.5),
-        dfl=config.get('dfl', 1.5),
-
-        # Другие параметры
-        patience=config.get('patience', 50),
+        # Только технические параметры (НЕ гиперпараметры обучения)
         device="cpu",
         workers=2,
         project="runs/detect",
@@ -237,138 +209,160 @@ def test_on_train_image(model_path, conf_threshold=0.1, use_grayscale=False):
     else:
         img = cv2.imread(str(train_image))
 
-    # Создаем копию для рисования
-    annotated_img = img.copy()
+    # Создаем PREDICTION копию для рисования
+    prediction_img = img.copy()
+
+    # Создаем GROUND TRUTH копию для рисования
+    gt_img = img.copy()
 
     # Округляем до сотых и считаем
     rounded_confs = [round(float(c), 2) for c in confidences]
     conf_counts = Counter(rounded_confs)
 
-    # Генерируем случайные цвета для каждого уникального confidence
-    unique_confs = sorted(conf_counts.keys(), reverse=True)
-    color_map = {}
-
-    for conf_val in unique_confs:
-        # Генерируем случайный яркий цвет (BGR формат для OpenCV)
-        color = (
-            random.randint(50, 255),
-            random.randint(50, 255),
-            random.randint(50, 255)
-        )
-        color_map[conf_val] = color
-
     # Получаем координаты boxes
     boxes_xyxy = boxes.xyxy.cpu().numpy()
 
-    # Рисуем каждый bbox своим цветом
+    # ===== ЛЕВАЯ ЧАСТЬ: PREDICTIONS =====
     for i, (box, conf) in enumerate(zip(boxes_xyxy, confidences)):
-        conf_rounded = round(float(conf), 2)
-        color = color_map[conf_rounded]
-
+        conf_val = float(conf)
         x1, y1, x2, y2 = map(int, box)
 
-        # Рисуем прямоугольник
-        cv2.rectangle(annotated_img, (x1, y1), (x2, y2), color, 3)
+        # Цвет по уровню confidence
+        if conf_val >= 0.4:
+            color = (0, 255, 0)      # Зелёный = высокая
+            level = "HIGH"
+        elif conf_val >= 0.25:
+            color = (0, 200, 255)    # Оранжевый = средняя
+            level = "MEDIUM"
+        else:
+            color = (0, 100, 255)    # Красный = низкая
+            level = "LOW"
 
-        # Подготавливаем текст
-        label = f"switch {conf_rounded:.2f}"
+        # Рисуем рамку
+        cv2.rectangle(prediction_img, (x1, y1), (x2, y2), color, 3)
 
-        # Размер текста
+        # Подпись
+        label = f"switch {conf_val:.2f}"
         font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.6
+        font_scale = 0.7
         thickness = 2
-        (text_width, text_height), baseline = cv2.getTextSize(label, font, font_scale, thickness)
 
         # Фон для текста
+        (text_width, text_height), baseline = cv2.getTextSize(label, font, font_scale, thickness)
         cv2.rectangle(
-            annotated_img,
-            (x1, y1 - text_height - baseline - 5),
-            (x1 + text_width, y1),
+            prediction_img,
+            (x1, y1 - text_height - baseline - 8),
+            (x1 + text_width + 5, y1),
             color,
             -1
         )
 
         # Текст
         cv2.putText(
-            annotated_img,
+            prediction_img,
             label,
-            (x1, y1 - baseline - 5),
+            (x1 + 2, y1 - baseline - 5),
             font,
             font_scale,
-            (255, 255, 255),
+            (0, 0, 0),  # Чёрный текст на цветном фоне
             thickness
         )
 
-    # Добавляем легенду
-    legend_height = 40 + len(unique_confs) * 35
-    legend_width = 250
-    legend_x = annotated_img.shape[1] - legend_width - 20
-    legend_y = 20
-
-    # Полупрозрачный фон для легенды
-    overlay = annotated_img.copy()
-    cv2.rectangle(
-        overlay,
-        (legend_x, legend_y),
-        (legend_x + legend_width, legend_y + legend_height),
-        (255, 255, 255),
-        -1
-    )
-    cv2.addWeighted(overlay, 0.7, annotated_img, 0.3, 0, annotated_img)
-
-    # Рамка легенды
-    cv2.rectangle(
-        annotated_img,
-        (legend_x, legend_y),
-        (legend_x + legend_width, legend_y + legend_height),
-        (0, 0, 0),
-        2
-    )
-
-    # Заголовок легенды
+    # Добавляем информационную панель вверху (PREDICTIONS)
+    info_text = f"PREDICTIONS: {len(boxes)} detections (conf >= {conf_threshold:.2f})"
+    cv2.rectangle(prediction_img, (0, 0), (img.shape[1], 50), (255, 255, 255), -1)
     cv2.putText(
-        annotated_img,
-        "Confidence Legend:",
-        (legend_x + 10, legend_y + 25),
+        prediction_img,
+        info_text,
+        (10, 35),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.6,
+        0.9,
         (0, 0, 0),
         2
     )
 
-    # Элементы легенды
-    for idx, conf_val in enumerate(unique_confs):
-        y_pos = legend_y + 50 + idx * 35
-        color = color_map[conf_val]
-        count = conf_counts[conf_val]
+    # ===== ПРАВАЯ ЧАСТЬ: GROUND TRUTH =====
+    # Читаем ground truth labels
+    label_path = Path("data/labels/train") / (train_image.stem + ".txt")
+    gt_boxes = []
 
-        # Цветной квадрат
+    if label_path.exists():
+        with open(label_path, 'r') as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) >= 5:
+                    # YOLO format: class x_center y_center width height (normalized 0-1)
+                    cls = int(parts[0])
+                    x_center = float(parts[1])
+                    y_center = float(parts[2])
+                    width = float(parts[3])
+                    height = float(parts[4])
+
+                    # Конвертируем в пиксельные координаты
+                    img_h, img_w = img.shape[:2]
+                    x_center_px = x_center * img_w
+                    y_center_px = y_center * img_h
+                    width_px = width * img_w
+                    height_px = height * img_h
+
+                    # Вычисляем x1, y1, x2, y2
+                    x1 = int(x_center_px - width_px / 2)
+                    y1 = int(y_center_px - height_px / 2)
+                    x2 = int(x_center_px + width_px / 2)
+                    y2 = int(y_center_px + height_px / 2)
+
+                    gt_boxes.append((x1, y1, x2, y2, cls))
+
+    # Рисуем ground truth boxes
+    gt_color = (0, 255, 0)  # Зелёный для GT
+    for i, (x1, y1, x2, y2, cls) in enumerate(gt_boxes):
+        # Рисуем рамку
+        cv2.rectangle(gt_img, (x1, y1), (x2, y2), gt_color, 3)
+
+        # Подпись
+        label = f"GT switch #{i+1}"
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.7
+        thickness = 2
+
+        # Фон для текста
+        (text_width, text_height), baseline = cv2.getTextSize(label, font, font_scale, thickness)
         cv2.rectangle(
-            annotated_img,
-            (legend_x + 10, y_pos - 15),
-            (legend_x + 30, y_pos + 5),
-            color,
+            gt_img,
+            (x1, y1 - text_height - baseline - 8),
+            (x1 + text_width + 5, y1),
+            gt_color,
             -1
-        )
-        cv2.rectangle(
-            annotated_img,
-            (legend_x + 10, y_pos - 15),
-            (legend_x + 30, y_pos + 5),
-            (0, 0, 0),
-            1
         )
 
         # Текст
-        text = f"{conf_val:.2f} ({count} шт.)"
         cv2.putText(
-            annotated_img,
-            text,
-            (legend_x + 40, y_pos),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
+            gt_img,
+            label,
+            (x1 + 2, y1 - baseline - 5),
+            font,
+            font_scale,
             (0, 0, 0),
-            1
+            thickness
         )
+
+    # Добавляем информационную панель вверху (GROUND TRUTH)
+    gt_info_text = f"GROUND TRUTH: {len(gt_boxes)} objects"
+    cv2.rectangle(gt_img, (0, 0), (img.shape[1], 50), (255, 255, 255), -1)
+    cv2.putText(
+        gt_img,
+        gt_info_text,
+        (10, 35),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.9,
+        (0, 0, 0),
+        2
+    )
+
+    # ===== СКЛЕИВАЕМ ДВА ИЗОБРАЖЕНИЯ =====
+    # Добавляем разделитель между изображениями (белая полоса)
+    separator = np.ones((img.shape[0], 10, 3), dtype=np.uint8) * 255
+    combined_img = np.hstack([prediction_img, separator, gt_img])
 
     # Создаем папку results если её нет
     results_dir = Path("results")
@@ -376,8 +370,10 @@ def test_on_train_image(model_path, conf_threshold=0.1, use_grayscale=False):
 
     # Сохраняем (перезаписываем предыдущий результат)
     output_path = results_dir / "train_prediction.jpg"
-    cv2.imwrite(str(output_path), annotated_img)
+    cv2.imwrite(str(output_path), combined_img)
     print(f"💾 Визуализация сохранена: {output_path}\n")
+    print(f"   Левая часть: Predictions ({len(boxes)} детекций)")
+    print(f"   Правая часть: Ground Truth ({len(gt_boxes)} объектов)\n")
 
     # Удаляем временный файл
     if use_grayscale and temp_image.exists():
