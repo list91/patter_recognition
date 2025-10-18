@@ -1,0 +1,17 @@
+# YOLO Dataset Configuration
+# Dataset for detecting scheme elements
+
+# Dataset path (relative to project root)
+path: data/yolo_dataset  # dataset root dir
+
+# Train/Val/Test splits
+train: train/images
+val: val/images
+test: test/images
+
+# Classes
+names:
+  0: scheme_element
+
+# Number of classes
+nc: 1
