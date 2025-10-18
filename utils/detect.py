@@ -15,7 +15,7 @@ def main():
     print("="*60)
 
     # Paths
-    MODEL_PATH = "runs/detect/scheme_detector/weights/best.pt"
+    MODEL_PATH = "runs/detect/scheme_detector/weights/last.pt"
     TEST_IMAGES_DIR = "data/test_images"
     OUTPUT_DIR = "results/detections"
 

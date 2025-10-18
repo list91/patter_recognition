@@ -1,68 +1,29 @@
+"""
+Генератор YOLO датасета на базе реальных фонов (предобработанных схем).
+Использует очищенные от объектов реальные схемы как фоны.
+"""
+
 import os
 import random
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image
 from pathlib import Path
 from scipy.ndimage import gaussian_filter
 
 
-def create_textured_background(width, height, base_color=245, noise_intensity=10):
-    """
-    Create a textured background with subtle noise.
-
-    Args:
-        width: Image width
-        height: Image height
-        base_color: Base gray value (0-255)
-        noise_intensity: Intensity of texture noise
-
-    Returns:
-        PIL Image with textured background
-    """
-    # Create base background
-    bg = np.ones((height, width, 3), dtype=np.float32) * base_color
-
-    # Add subtle noise texture
-    noise = np.random.normal(0, noise_intensity, (height, width, 3))
-    bg = bg + noise
-
-    # Clip to valid range
-    bg = np.clip(bg, 0, 255).astype(np.uint8)
-
-    return Image.fromarray(bg)
-
-
-def create_plain_background(width, height):
-    """
-    Create a plain gray background.
-
-    Args:
-        width: Image width
-        height: Image height
-
-    Returns:
-        PIL Image with plain background
-    """
-    # Random gray value between 220-255
-    gray_value = random.randint(220, 255)
-    bg = np.ones((height, width, 3), dtype=np.uint8) * gray_value
-
-    return Image.fromarray(bg)
-
-
 def create_grain_mask(height, width, num_spots_range=(10, 20), spot_size_range=(50, 200), blur_sigma=50):
     """
-    Create a mask with random spots for grain effect.
+    Создает маску со случайными пятнами для grain эффекта.
 
     Args:
-        height: Image height
-        width: Image width
-        num_spots_range: Tuple of (min, max) number of spots
-        spot_size_range: Tuple of (min, max) radius for spots
-        blur_sigma: Sigma for gaussian blur
+        height: высота изображения
+        width: ширина изображения
+        num_spots_range: диапазон количества пятен
+        spot_size_range: диапазон размера пятен
+        blur_sigma: сигма для гауссова размытия
 
     Returns:
-        Normalized mask array with values between 0 and 1
+        Нормализованная маска со значениями от 0 до 1
     """
     mask = np.zeros((height, width), dtype=np.float32)
 
@@ -112,14 +73,14 @@ def create_grain_mask(height, width, num_spots_range=(10, 20), spot_size_range=(
 
 def apply_grain(image, grain_intensity):
     """
-    Apply grain effect to image.
+    Применяет grain эффект к изображению.
 
     Args:
         image: PIL Image
-        grain_intensity: Intensity of grain (0-100)
+        grain_intensity: интенсивность grain (0-100)
 
     Returns:
-        PIL Image with grain applied
+        PIL Image с примененным grain
     """
     if grain_intensity == 0:
         return image
@@ -142,13 +103,13 @@ def apply_grain(image, grain_intensity):
 
 def load_object_images(objects_dir):
     """
-    Load all object images from directory.
+    Загружает все изображения объектов из директории.
 
     Args:
-        objects_dir: Path to directory with object images
+        objects_dir: путь к директории с объектами
 
     Returns:
-        List of PIL Images
+        Список PIL Images
     """
     objects = []
     objects_path = Path(objects_dir)
@@ -157,70 +118,96 @@ def load_object_images(objects_dir):
         img = Image.open(img_file).convert('RGB')
         objects.append(img)
 
-    print(f"Loaded {len(objects)} object images from {objects_dir}")
+    print(f"Загружено {len(objects)} объектов из {objects_dir}")
     return objects
 
 
-def generate_synthetic_image(objects, img_size=1280, num_objects_range=(10, 30),
-                            scale_range=(0.7, 1.3), use_textured_bg=False):
+def load_background_images(backgrounds_dir):
     """
-    Generate a synthetic image with randomly placed objects.
+    Загружает все фоновые изображения (предобработанные схемы).
 
     Args:
-        objects: List of PIL Images (object crops)
-        img_size: Size of output image (square)
-        num_objects_range: Tuple of (min, max) number of objects to place
-        scale_range: Tuple of (min, max) scale factor for objects
-        use_textured_bg: Whether to use textured background
+        backgrounds_dir: путь к директории с фонами
 
     Returns:
-        Tuple of (PIL Image, list of annotations)
-        Annotations format: [(class_id, x_center, y_center, width, height), ...]
-        All coordinates are normalized (0-1)
+        Список кортежей (PIL Image, имя_файла)
     """
-    # Create background
-    if use_textured_bg:
-        canvas = create_textured_background(img_size, img_size)
-    else:
-        canvas = create_plain_background(img_size, img_size)
+    backgrounds = []
+    backgrounds_path = Path(backgrounds_dir)
 
-    # Randomly select number of objects
+    for img_file in sorted(backgrounds_path.glob("*.jpg")):
+        img = Image.open(img_file).convert('RGB')
+        backgrounds.append((img, img_file.stem))
+
+    for img_file in sorted(backgrounds_path.glob("*.png")):
+        img = Image.open(img_file).convert('RGB')
+        backgrounds.append((img, img_file.stem))
+
+    print(f"Загружено {len(backgrounds)} фоновых изображений из {backgrounds_dir}")
+    return backgrounds
+
+
+def generate_image_on_background(background_img, objects, num_objects_range=(5, 15),
+                                 scale_range=(0.8, 1.2)):
+    """
+    Генерирует изображение, размещая объекты на реальном фоне.
+
+    Args:
+        background_img: PIL Image фона
+        objects: список PIL Images объектов
+        num_objects_range: диапазон количества объектов
+        scale_range: диапазон масштабирования объектов
+
+    Returns:
+        Tuple (PIL Image, list of annotations)
+        Аннотации в формате: [(class_id, x_center, y_center, width, height), ...]
+        Все координаты нормализованы (0-1)
+    """
+    # Создаем копию фона
+    canvas = background_img.copy()
+    img_width, img_height = canvas.size
+
+    # Случайное количество объектов
     num_objects = random.randint(num_objects_range[0], num_objects_range[1])
 
     annotations = []
 
     for _ in range(num_objects):
-        # Randomly select an object
+        # Случайный выбор объекта
         obj = random.choice(objects)
 
-        # Random scale
+        # Случайный масштаб
         scale = random.uniform(scale_range[0], scale_range[1])
         new_width = int(obj.width * scale)
         new_height = int(obj.height * scale)
 
-        # Resize object
+        # Проверка минимального размера
+        if new_width < 5 or new_height < 5:
+            continue
+
+        # Изменение размера объекта
         obj_scaled = obj.resize((new_width, new_height), Image.LANCZOS)
 
-        # Random position (ensure object is fully inside image)
-        max_x = img_size - new_width
-        max_y = img_size - new_height
+        # Случайная позиция (объект должен быть полностью внутри изображения)
+        max_x = img_width - new_width
+        max_y = img_height - new_height
 
         if max_x <= 0 or max_y <= 0:
-            continue  # Skip if object is too large
+            continue  # Пропускаем, если объект слишком большой
 
         x = random.randint(0, max_x)
         y = random.randint(0, max_y)
 
-        # Paste object on canvas
+        # Вставляем объект на холст
         canvas.paste(obj_scaled, (x, y))
 
-        # Calculate YOLO format annotation (normalized coordinates)
-        x_center = (x + new_width / 2) / img_size
-        y_center = (y + new_height / 2) / img_size
-        width = new_width / img_size
-        height = new_height / img_size
+        # Вычисляем YOLO аннотацию (нормализованные координаты)
+        x_center = (x + new_width / 2) / img_width
+        y_center = (y + new_height / 2) / img_height
+        width = new_width / img_width
+        height = new_height / img_height
 
-        # Class ID is 0 (single class)
+        # Class ID = 0 (один класс)
         annotations.append((0, x_center, y_center, width, height))
 
     return canvas, annotations
@@ -228,11 +215,11 @@ def generate_synthetic_image(objects, img_size=1280, num_objects_range=(10, 30),
 
 def save_yolo_annotation(annotations, output_path):
     """
-    Save annotations in YOLO format.
+    Сохраняет аннотации в YOLO формате.
 
     Args:
-        annotations: List of (class_id, x_center, y_center, width, height)
-        output_path: Path to save .txt file
+        annotations: список (class_id, x_center, y_center, width, height)
+        output_path: путь для сохранения .txt файла
     """
     with open(output_path, 'w') as f:
         for ann in annotations:
@@ -240,149 +227,152 @@ def save_yolo_annotation(annotations, output_path):
             f.write(f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}\n")
 
 
-def generate_dataset(objects_dir, output_dir, num_train=500, num_val=150, num_test=100,
-                     img_size=1280, num_objects_range=(10, 30), scale_range=(0.7, 1.3)):
+def generate_dataset_on_real_backgrounds(backgrounds_dir, objects_dir, output_dir,
+                                         images_per_combo=100, num_objects_range=(5, 15),
+                                         scale_range=(0.8, 1.2), grain_levels=[0, 5, 10, 15]):
     """
-    Generate complete YOLO dataset with train/val/test splits.
+    Генерирует YOLO датасет на основе реальных фонов.
 
     Args:
-        objects_dir: Directory with object crop images
-        output_dir: Output directory for dataset
-        num_train: Number of training images
-        num_val: Number of validation images
-        num_test: Number of test images
-        img_size: Size of generated images
-        num_objects_range: Range of objects per image
-        scale_range: Range of object scales
+        backgrounds_dir: директория с предобработанными фонами
+        objects_dir: директория с объектами
+        output_dir: выходная директория
+        images_per_combo: количество изображений на комбинацию (фон + grain)
+        num_objects_range: диапазон объектов на изображение
+        scale_range: диапазон масштабов объектов
+        grain_levels: уровни интенсивности grain
     """
-    # Load object images
+    # Загружаем объекты и фоны
     objects = load_object_images(objects_dir)
+    backgrounds = load_background_images(backgrounds_dir)
 
     if len(objects) == 0:
-        print("ERROR: No object images found!")
+        print("ОШИБКА: Не найдено объектов!")
         return
 
-    # Create output directories
+    if len(backgrounds) == 0:
+        print("ОШИБКА: Не найдено фоновых изображений!")
+        return
+
+    # Создаем выходные директории
     output_path = Path(output_dir)
-    for split in ['train', 'val', 'test']:
-        (output_path / split / 'images').mkdir(parents=True, exist_ok=True)
-        (output_path / split / 'labels').mkdir(parents=True, exist_ok=True)
+    (output_path / 'train' / 'images').mkdir(parents=True, exist_ok=True)
+    (output_path / 'train' / 'labels').mkdir(parents=True, exist_ok=True)
 
-    # Grain intensity levels (4 levels)
-    grain_levels = [0, 10, 20, 30]
-
-    # Generate datasets
-    splits = [
-        ('train', num_train),
-        ('val', num_val),
-        ('test', num_test)
-    ]
-
-    total_generated = 0
-
-    for split_name, num_images in splits:
-        # Check how many images already exist
-        existing_images = list((output_path / split_name / 'images').glob('*.jpg'))
-        num_existing = len(existing_images)
-
-        print(f"\n{'='*60}")
-        print(f"Generating {split_name} set: {num_images} images")
-        print(f"Existing: {num_existing} images")
-        print(f"{'='*60}")
-
-        if num_existing >= num_images:
-            print(f"[SKIP] {split_name} set already complete ({num_existing}/{num_images})")
-            total_generated += num_existing
-            continue
-
-        start_idx = num_existing
-        if start_idx > 0:
-            print(f"[RESUME] Continuing from image {start_idx}")
-
-        for i in range(start_idx, num_images):
-            # Decide background type (50/50 split)
-            use_textured = random.random() < 0.5
-            bg_type = "textured" if use_textured else "plain"
-
-            # Generate synthetic image
-            img, annotations = generate_synthetic_image(
-                objects=objects,
-                img_size=img_size,
-                num_objects_range=num_objects_range,
-                scale_range=scale_range,
-                use_textured_bg=use_textured
-            )
-
-            num_objs = len(annotations)
-
-            # Apply random grain level
-            grain_intensity = random.choice(grain_levels)
-            img = apply_grain(img, grain_intensity)
-
-            # Convert to grayscale
-            img = img.convert('L')
-
-            # Save image and annotation
-            img_filename = f"{split_name}_{i:05d}.jpg"
-            img_path = output_path / split_name / 'images' / img_filename
-            ann_path = output_path / split_name / 'labels' / f"{split_name}_{i:05d}.txt"
-
-            img.save(img_path, quality=95)
-            save_yolo_annotation(annotations, ann_path)
-
-            total_generated += 1
-
-            # More verbose logging
-            progress_pct = ((i + 1) / num_images) * 100
-            if (i + 1) % 10 == 0 or (i + 1) <= 5:
-                print(f"  [{progress_pct:5.1f}%] {i + 1}/{num_images} | "
-                      f"Objs: {num_objs:2d} | BG: {bg_type:8s} | Grain: {grain_intensity:2d}")
-
-        print(f"[OK] {split_name} set completed: {num_images} images")
+    # Подсчет общего количества изображений
+    total_images = len(backgrounds) * len(grain_levels) * images_per_combo
 
     print(f"\n{'='*60}")
-    print(f"DATASET GENERATION COMPLETE!")
+    print(f"ГЕНЕРАЦИЯ ДАТАСЕТА НА РЕАЛЬНЫХ ФОНАХ")
     print(f"{'='*60}")
-    print(f"Total images generated: {total_generated}")
-    print(f"Output directory: {output_dir}")
+    print(f"Фонов: {len(backgrounds)}")
+    print(f"Объектов: {len(objects)}")
+    print(f"Уровней grain: {len(grain_levels)} {grain_levels}")
+    print(f"Изображений на комбинацию: {images_per_combo}")
+    print(f"Объектов на изображение: {num_objects_range[0]}-{num_objects_range[1]}")
+    print(f"Масштаб объектов: {scale_range[0]}x-{scale_range[1]}x")
+    print(f"{'='*60}")
+    print(f"ВСЕГО ИЗОБРАЖЕНИЙ: {total_images}")
+    print(f"{'='*60}\n")
+
+    # Проверяем существующие изображения
+    existing_images = list((output_path / 'train' / 'images').glob('*.jpg'))
+    num_existing = len(existing_images)
+
+    if num_existing > 0:
+        print(f"Найдено {num_existing} существующих изображений")
+        print(f"Будут сгенерированы только недостающие\n")
+
+    global_idx = 0
+    generated_count = 0
+
+    # Генерация
+    for bg_img, bg_name in backgrounds:
+        for grain_intensity in grain_levels:
+            print(f"\nФон: {bg_name} | Grain: {grain_intensity}")
+            print(f"-" * 60)
+
+            for i in range(images_per_combo):
+                # Формируем имя файла
+                img_filename = f"train_{global_idx:05d}.jpg"
+                img_path = output_path / 'train' / 'images' / img_filename
+                ann_path = output_path / 'train' / 'labels' / f"train_{global_idx:05d}.txt"
+
+                # Пропускаем если файл уже существует
+                if img_path.exists() and ann_path.exists():
+                    global_idx += 1
+                    continue
+
+                # Генерируем изображение с объектами
+                img, annotations = generate_image_on_background(
+                    background_img=bg_img,
+                    objects=objects,
+                    num_objects_range=num_objects_range,
+                    scale_range=scale_range
+                )
+
+                num_objs = len(annotations)
+
+                # Применяем grain
+                img = apply_grain(img, grain_intensity)
+
+                # Конвертируем в grayscale
+                img = img.convert('L')
+
+                # Сохраняем
+                img.save(img_path, quality=95)
+                save_yolo_annotation(annotations, ann_path)
+
+                generated_count += 1
+                global_idx += 1
+
+                # Лог каждые 10 изображений
+                if (i + 1) % 10 == 0 or (i + 1) <= 5:
+                    progress_pct = ((i + 1) / images_per_combo) * 100
+                    print(f"  [{progress_pct:5.1f}%] {i + 1}/{images_per_combo} | "
+                          f"Объектов: {num_objs:2d}")
+
+            print(f"[OK] Комбинация завершена")
+
+    print(f"\n{'='*60}")
+    print(f"ГЕНЕРАЦИЯ ЗАВЕРШЕНА!")
+    print(f"{'='*60}")
+    print(f"Сгенерировано новых изображений: {generated_count}")
+    print(f"Всего изображений в train: {global_idx}")
+    print(f"Выходная директория: {output_dir}")
     print(f"{'='*60}\n")
 
 
 if __name__ == "__main__":
-    # Configuration
+    # Конфигурация
+    BACKGROUNDS_DIR = "results/preprocessed_20251018_191740"
     OBJECTS_DIR = "data/datasets/objects-v2"
     OUTPUT_DIR = "data/yolo_dataset"
 
-    # Generation parameters (as agreed)
-    IMG_SIZE = 1280
-    NUM_OBJECTS_RANGE = (10, 30)
-    SCALE_RANGE = (0.7, 1.3)
+    # Параметры генерации (Вариант А)
+    IMAGES_PER_COMBO = 100  # На каждую комбинацию фон+grain
+    NUM_OBJECTS_RANGE = (5, 15)
+    SCALE_RANGE = (0.8, 1.2)
+    GRAIN_LEVELS = [0, 5, 10, 15]  # 4 уровня, вдвое меньше прошлого
 
-    # Dataset sizes
-    NUM_TRAIN = 700
-    NUM_VAL = 200
-    NUM_TEST = 100
+    # Итого: 3 фона × 4 grain × 100 = 1200 изображений
 
     print("="*60)
-    print("YOLO DATASET GENERATOR")
+    print("YOLO DATASET GENERATOR - REAL BACKGROUNDS")
     print("="*60)
-    print(f"Objects directory: {OBJECTS_DIR}")
-    print(f"Output directory: {OUTPUT_DIR}")
-    print(f"Image size: {IMG_SIZE}x{IMG_SIZE}")
-    print(f"Objects per image: {NUM_OBJECTS_RANGE[0]}-{NUM_OBJECTS_RANGE[1]}")
-    print(f"Scale range: {SCALE_RANGE[0]}x-{SCALE_RANGE[1]}x")
-    print(f"Train: {NUM_TRAIN}, Val: {NUM_VAL}, Test: {NUM_TEST}")
-    print(f"Total: {NUM_TRAIN + NUM_VAL + NUM_TEST} images")
+    print(f"Фоны: {BACKGROUNDS_DIR}")
+    print(f"Объекты: {OBJECTS_DIR}")
+    print(f"Выход: {OUTPUT_DIR}")
+    print(f"Параметры: Вариант А")
     print("="*60)
 
-    # Generate dataset
-    generate_dataset(
+    # Генерация
+    generate_dataset_on_real_backgrounds(
+        backgrounds_dir=BACKGROUNDS_DIR,
         objects_dir=OBJECTS_DIR,
         output_dir=OUTPUT_DIR,
-        num_train=NUM_TRAIN,
-        num_val=NUM_VAL,
-        num_test=NUM_TEST,
-        img_size=IMG_SIZE,
+        images_per_combo=IMAGES_PER_COMBO,
         num_objects_range=NUM_OBJECTS_RANGE,
-        scale_range=SCALE_RANGE
+        scale_range=SCALE_RANGE,
+        grain_levels=GRAIN_LEVELS
     )
