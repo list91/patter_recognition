@@ -19,13 +19,27 @@ def main():
         print(f"CUDA Version: {torch.version.cuda}")
     print("="*60)
 
-    # Load YOLOv8 model (nano version for faster training)
-    # You can change to: yolov8s.pt, yolov8m.pt, yolov8l.pt, yolov8x.pt for better accuracy
-    model = YOLO('yolov8n.pt')
+    # Check if we have a saved model to resume from
+    import os
+    last_model_path = 'runs/detect/scheme_detector/weights/last.pt'
+    resume_training = False
 
-    print("\nStarting training...")
+    if os.path.exists(last_model_path):
+        print(f"\n[FOUND] Previous training checkpoint: {last_model_path}")
+        print("Resuming training from last checkpoint...")
+        model = YOLO(last_model_path)
+        resume_training = True
+    else:
+        print("\n[NEW] No previous checkpoint found")
+        print("Starting fresh training with pretrained YOLOv8n...")
+        # Load YOLOv8 model (nano version for faster training)
+        # You can change to: yolov8s.pt, yolov8m.pt, yolov8l.pt, yolov8x.pt for better accuracy
+        model = YOLO('yolov8n.pt')
+
+    print("\nTraining configuration:")
     print("Dataset: data/yolo_dataset/dataset.yaml")
     print("Model: YOLOv8n (nano)")
+    print(f"Resume: {resume_training}")
     print("\nTraining parameters:")
     print("  - Image size: 1280x1280")
     print("  - Batch size: 8")
@@ -40,6 +54,7 @@ def main():
     # - batch=8: Adjust based on GPU memory
     # - epochs=100: Can increase for better results
     # - patience=20: Early stopping if no improvement
+    # - resume=True: Continue from last checkpoint if available
     results = model.train(
         data='data/yolo_dataset/dataset.yaml',
         epochs=100,
@@ -53,6 +68,7 @@ def main():
         project='runs/detect',
         name='scheme_detector',
         exist_ok=True,
+        resume=resume_training,  # Resume if checkpoint found
         pretrained=True,
         optimizer='AdamW',
         verbose=True,

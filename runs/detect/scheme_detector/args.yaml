@@ -1,6 +1,6 @@
 task: detect
 mode: train
-model: yolov8n.pt
+model: runs\detect\scheme_detector\weights\last.pt
 data: data/yolo_dataset/dataset.yaml
 epochs: 100
 time: null
@@ -11,7 +11,7 @@ save: true
 save_period: 10
 cache: false
 device: cpu
-workers: 4
+workers: 0
 project: runs/detect
 name: scheme_detector
 exist_ok: true
@@ -24,7 +24,7 @@ single_cls: true
 rect: false
 cos_lr: true
 close_mosaic: 10
-resume: false
+resume: runs\detect\scheme_detector\weights\last.pt
 amp: true
 fraction: 1.0
 profile: false
