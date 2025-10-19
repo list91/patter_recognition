@@ -15,7 +15,7 @@ def main():
     print("="*60)
 
     # Paths
-    MODEL_PATH = "runs/detect/scheme_detector/weights/last.pt"
+    MODEL_PATH = "runs/detect/scheme_detector/weights/epoch50.pt"
     TEST_IMAGES_DIR = "data/test_images"
     OUTPUT_DIR = "results/detections"
 
@@ -72,7 +72,7 @@ def main():
         print(f"[{i}/{len(image_files)}] Processing: {img_file.name}")
 
         # Run inference
-        results = model(str(img_file), conf=0.6, iou=0.45, imgsz=1280, verbose=False)
+        results = model(str(img_file), conf=0.2, iou=0.45, imgsz=1280, verbose=False)
 
         # Get the result for the first (and only) image
         result = results[0]
