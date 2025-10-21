@@ -1,0 +1,18 @@
+# Deep Learning Framework
+torch>=2.0.0
+torchvision>=0.15.0
+
+# YOLO Object Detection
+ultralytics>=8.0.0
+
+# Image Processing
+opencv-python>=4.8.0
+Pillow>=10.0.0
+
+# Scientific Computing
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Optional but recommended for better performance
+# Uncomment if you have NVIDIA GPU:
+# nvidia-ml-py3>=7.352.0
