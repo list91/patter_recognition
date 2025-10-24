@@ -5,7 +5,7 @@ data: data/yolo_dataset/dataset.yaml
 epochs: 100
 time: null
 patience: 20
-batch: 8
+batch: 2
 imgsz: 1280
 save: true
 save_period: 10
