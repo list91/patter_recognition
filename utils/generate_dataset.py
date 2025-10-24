@@ -101,6 +101,25 @@ def apply_grain(image, grain_intensity):
     return Image.fromarray(noisy_img)
 
 
+def create_transparency_mask(obj_image, threshold=240):
+    """
+    Создает маску прозрачности для объекта на белом фоне.
+
+    Args:
+        obj_image: PIL Image объекта
+        threshold: порог яркости для определения фона (0-255)
+
+    Returns:
+        PIL Image маска в режиме 'L'
+    """
+    obj_array = np.array(obj_image)
+    # Берем минимальную яркость по RGB каналам
+    brightness = obj_array.min(axis=2)
+    # Темные пиксели = 255 (непрозрачно), светлые = 0 (прозрачно)
+    mask = ((brightness < threshold).astype(np.uint8) * 255)
+    return Image.fromarray(mask, 'L')
+
+
 def load_object_images(objects_dir):
     """
     Загружает все изображения объектов из директории.
@@ -109,16 +128,17 @@ def load_object_images(objects_dir):
         objects_dir: путь к директории с объектами
 
     Returns:
-        Список PIL Images
+        Список кортежей (PIL Image, PIL Image mask)
     """
     objects = []
     objects_path = Path(objects_dir)
 
     for img_file in sorted(objects_path.glob("*.jpg")):
         img = Image.open(img_file).convert('RGB')
-        objects.append(img)
+        mask = create_transparency_mask(img, threshold=240)
+        objects.append((img, mask))
 
-    print(f"Загружено {len(objects)} объектов из {objects_dir}")
+    print(f"Загружено {len(objects)} объектов с масками из {objects_dir}")
     return objects
 
 
@@ -147,21 +167,185 @@ def load_background_images(backgrounds_dir):
     return backgrounds
 
 
-def generate_image_on_background(background_img, objects, num_objects_range=(5, 15),
-                                 scale_range=(0.8, 1.2)):
+def generate_image_with_lines(background_img, objects, num_lines_range=(1, 3),
+                              objects_per_line_range=(3, 8), scale_range=(0.8, 1.2),
+                              spacing_range=(10, 40), grouping_probability=0.5,
+                              group_size_range=(2, 3), group_spacing_multiplier=(2, 4)):
     """
-    Генерирует изображение, размещая объекты на реальном фоне.
+    Генерирует изображение, размещая объекты в линии с возможной группировкой.
+
+    Объекты размещаются в горизонтальные линии, как компоненты на схеме.
+    Могут быть равномерно распределены или сгруппированы (группы с маленьким
+    промежутком внутри и большим между группами).
 
     Args:
         background_img: PIL Image фона
         objects: список PIL Images объектов
-        num_objects_range: диапазон количества объектов
+        num_lines_range: диапазон количества линий (1-3)
+        objects_per_line_range: количество объектов в линии (3-8)
         scale_range: диапазон масштабирования объектов
+        spacing_range: базовое расстояние между объектами в пикселях
+        grouping_probability: вероятность группировки объектов (0-1)
+        group_size_range: размер группы (2-3 объекта)
+        group_spacing_multiplier: множитель расстояния между группами (2-4x)
 
     Returns:
         Tuple (PIL Image, list of annotations)
-        Аннотации в формате: [(class_id, x_center, y_center, width, height), ...]
-        Все координаты нормализованы (0-1)
+    """
+    canvas = background_img.copy()
+    img_width, img_height = canvas.size
+    annotations = []
+
+    # Определяем количество линий
+    num_lines = random.randint(num_lines_range[0], num_lines_range[1])
+
+    # Вычисляем доступную высоту для линий
+    line_height_space = img_height // (num_lines + 1)
+
+    for line_idx in range(num_lines):
+        # Y-координата линии (распределяем линии равномерно по высоте)
+        line_y = line_height_space * (line_idx + 1)
+
+        # Количество объектов в этой линии
+        num_objects = random.randint(objects_per_line_range[0], objects_per_line_range[1])
+
+        # Решаем, будет ли группировка в этой линии
+        use_grouping = random.random() < grouping_probability
+
+        # Масштабируем объекты и получаем их размеры
+        scaled_objects = []
+        for _ in range(num_objects):
+            obj_img, obj_mask = random.choice(objects)
+            scale = random.uniform(scale_range[0], scale_range[1])
+            new_width = int(obj_img.width * scale)
+            new_height = int(obj_img.height * scale)
+
+            if new_width < 5 or new_height < 5:
+                continue
+
+            obj_scaled = obj_img.resize((new_width, new_height), Image.LANCZOS)
+            mask_scaled = obj_mask.resize((new_width, new_height), Image.LANCZOS)
+            scaled_objects.append((obj_scaled, mask_scaled, new_width, new_height))
+
+        if len(scaled_objects) == 0:
+            continue
+
+        # Вычисляем общую ширину линии
+        total_obj_width = sum(w for _, _, w, _ in scaled_objects)
+
+        if use_grouping:
+            # Группировка: разбиваем на группы
+            group_size = random.randint(group_size_range[0], group_size_range[1])
+            groups = []
+            current_group = []
+
+            for obj_data in scaled_objects:
+                current_group.append(obj_data)
+                if len(current_group) >= group_size:
+                    groups.append(current_group)
+                    current_group = []
+
+            if current_group:  # Добавляем последнюю неполную группу
+                groups.append(current_group)
+
+            # Расстояния
+            base_spacing = random.randint(spacing_range[0], spacing_range[1])
+            group_spacing = base_spacing * random.uniform(group_spacing_multiplier[0],
+                                                          group_spacing_multiplier[1])
+
+            # Вычисляем общую ширину с учетом группировки
+            total_width_with_spacing = (total_obj_width +
+                                       base_spacing * (len(scaled_objects) - len(groups)) +
+                                       group_spacing * (len(groups) - 1))
+
+            # Начальная X позиция (случайная вместо центрирования)
+            if total_width_with_spacing < img_width:
+                max_start_x = img_width - total_width_with_spacing
+                start_x = random.uniform(0, max_start_x)
+            else:
+                start_x = 10  # Отступ от края
+                # Уменьшаем расстояния если не помещается
+                scale_factor = (img_width - 20) / total_width_with_spacing
+                base_spacing *= scale_factor
+                group_spacing *= scale_factor
+
+            # Размещаем группы
+            current_x = start_x
+            for group_idx, group in enumerate(groups):
+                for obj_idx, (obj_scaled, mask_scaled, obj_width, obj_height) in enumerate(group):
+                    # Y позиция с небольшой случайной вариацией
+                    y_variation = random.randint(-5, 5)
+                    obj_y = line_y - obj_height // 2 + y_variation
+
+                    # Проверяем границы
+                    obj_y = max(0, min(obj_y, img_height - obj_height))
+                    obj_x = int(current_x)
+
+                    if obj_x + obj_width <= img_width:
+                        # Вставляем объект с маской (удаление белого фона)
+                        canvas.paste(obj_scaled, (obj_x, obj_y), mask=mask_scaled)
+
+                        # Добавляем аннотацию
+                        x_center = (obj_x + obj_width / 2) / img_width
+                        y_center = (obj_y + obj_height / 2) / img_height
+                        width = obj_width / img_width
+                        height = obj_height / img_height
+                        annotations.append((0, x_center, y_center, width, height))
+
+                    # Смещаемся на ширину объекта + расстояние внутри группы
+                    current_x += obj_width + base_spacing
+
+                # Добавляем расстояние между группами (убираем лишний base_spacing)
+                if group_idx < len(groups) - 1:
+                    current_x += (group_spacing - base_spacing)
+
+        else:
+            # Равномерное распределение без группировки
+            spacing = random.randint(spacing_range[0], spacing_range[1])
+            total_width_with_spacing = total_obj_width + spacing * (len(scaled_objects) - 1)
+
+            # Начальная X позиция (случайная вместо центрирования)
+            if total_width_with_spacing < img_width:
+                max_start_x = img_width - total_width_with_spacing
+                start_x = random.uniform(0, max_start_x)
+            else:
+                start_x = 10
+                # Уменьшаем расстояния если не помещается
+                spacing = int((img_width - 20 - total_obj_width) / max(1, len(scaled_objects) - 1))
+
+            # Размещаем объекты
+            current_x = start_x
+            for obj_scaled, mask_scaled, obj_width, obj_height in scaled_objects:
+                # Y позиция с небольшой случайной вариацией
+                y_variation = random.randint(-5, 5)
+                obj_y = line_y - obj_height // 2 + y_variation
+
+                # Проверяем границы
+                obj_y = max(0, min(obj_y, img_height - obj_height))
+                obj_x = int(current_x)
+
+                if obj_x + obj_width <= img_width:
+                    # Вставляем объект с маской (удаление белого фона)
+                    canvas.paste(obj_scaled, (obj_x, obj_y), mask=mask_scaled)
+
+                    # Добавляем аннотацию
+                    x_center = (obj_x + obj_width / 2) / img_width
+                    y_center = (obj_y + obj_height / 2) / img_height
+                    width = obj_width / img_width
+                    height = obj_height / img_height
+                    annotations.append((0, x_center, y_center, width, height))
+
+                # Смещаемся на ширину объекта + расстояние
+                current_x += obj_width + spacing
+
+    return canvas, annotations
+
+
+def generate_image_on_background(background_img, objects, num_objects_range=(5, 15),
+                                 scale_range=(0.8, 1.2)):
+    """
+    DEPRECATED: Старая функция со случайным размещением.
+    Оставлена для обратной совместимости.
     """
     # Создаем копию фона
     canvas = background_img.copy()
@@ -174,19 +358,20 @@ def generate_image_on_background(background_img, objects, num_objects_range=(5, 
 
     for _ in range(num_objects):
         # Случайный выбор объекта
-        obj = random.choice(objects)
+        obj_img, obj_mask = random.choice(objects)
 
         # Случайный масштаб
         scale = random.uniform(scale_range[0], scale_range[1])
-        new_width = int(obj.width * scale)
-        new_height = int(obj.height * scale)
+        new_width = int(obj_img.width * scale)
+        new_height = int(obj_img.height * scale)
 
         # Проверка минимального размера
         if new_width < 5 or new_height < 5:
             continue
 
-        # Изменение размера объекта
-        obj_scaled = obj.resize((new_width, new_height), Image.LANCZOS)
+        # Изменение размера объекта и маски
+        obj_scaled = obj_img.resize((new_width, new_height), Image.LANCZOS)
+        mask_scaled = obj_mask.resize((new_width, new_height), Image.LANCZOS)
 
         # Случайная позиция (объект должен быть полностью внутри изображения)
         max_x = img_width - new_width
@@ -198,8 +383,8 @@ def generate_image_on_background(background_img, objects, num_objects_range=(5, 
         x = random.randint(0, max_x)
         y = random.randint(0, max_y)
 
-        # Вставляем объект на холст
-        canvas.paste(obj_scaled, (x, y))
+        # Вставляем объект с маской (удаление белого фона)
+        canvas.paste(obj_scaled, (x, y), mask=mask_scaled)
 
         # Вычисляем YOLO аннотацию (нормализованные координаты)
         x_center = (x + new_width / 2) / img_width
@@ -263,14 +448,20 @@ def generate_dataset_on_real_backgrounds(backgrounds_dir, objects_dir, output_di
     total_images = len(backgrounds) * len(grain_levels) * images_per_combo
 
     print(f"\n{'='*60}")
-    print(f"ГЕНЕРАЦИЯ ДАТАСЕТА НА РЕАЛЬНЫХ ФОНАХ")
+    print(f"ГЕНЕРАЦИЯ ДАТАСЕТА С ЛИНЕЙНЫМ РАЗМЕЩЕНИЕМ")
     print(f"{'='*60}")
     print(f"Фонов: {len(backgrounds)}")
     print(f"Объектов: {len(objects)}")
     print(f"Уровней grain: {len(grain_levels)} {grain_levels}")
     print(f"Изображений на комбинацию: {images_per_combo}")
-    print(f"Объектов на изображение: {num_objects_range[0]}-{num_objects_range[1]}")
-    print(f"Масштаб объектов: {scale_range[0]}x-{scale_range[1]}x")
+    print(f"Режим размещения: Линии с группировкой")
+    print(f"  - Линий на изображение: 1-3")
+    print(f"  - Объектов в линии: 2-17")
+    print(f"  - Вероятность группировки: 50%")
+    print(f"  - Равномерное расстояние: 15-50 пикс")
+    print(f"  - Расстояние между группами: 2-20x базового")
+    print(f"  - Позиция ряда: случайная (без центрирования)")
+    print(f"  - Масштаб объектов: {scale_range[0]}x-{scale_range[1]}x")
     print(f"{'='*60}")
     print(f"ВСЕГО ИЗОБРАЖЕНИЙ: {total_images}")
     print(f"{'='*60}\n")
@@ -303,12 +494,17 @@ def generate_dataset_on_real_backgrounds(backgrounds_dir, objects_dir, output_di
                     global_idx += 1
                     continue
 
-                # Генерируем изображение с объектами
-                img, annotations = generate_image_on_background(
+                # Генерируем изображение с объектами в линиях
+                img, annotations = generate_image_with_lines(
                     background_img=bg_img,
                     objects=objects,
-                    num_objects_range=num_objects_range,
-                    scale_range=scale_range
+                    num_lines_range=(1, 3),
+                    objects_per_line_range=(2, 17),
+                    scale_range=scale_range,
+                    spacing_range=(15, 50),
+                    grouping_probability=0.5,
+                    group_size_range=(2, 3),
+                    group_spacing_multiplier=(2, 20)
                 )
 
                 num_objs = len(annotations)
@@ -349,21 +545,21 @@ if __name__ == "__main__":
     OBJECTS_DIR = "data/datasets/objects-v2"
     OUTPUT_DIR = "data/yolo_dataset"
 
-    # Параметры генерации (Вариант А)
-    IMAGES_PER_COMBO = 100  # На каждую комбинацию фон+grain
-    NUM_OBJECTS_RANGE = (5, 15)
+    # Параметры генерации (Тестовый режим с линейным размещением)
+    IMAGES_PER_COMBO = 10  # На каждую комбинацию фон+grain (для тестирования)
+    NUM_OBJECTS_RANGE = (5, 15)  # Не используется с новым алгоритмом
     SCALE_RANGE = (0.8, 1.2)
-    GRAIN_LEVELS = [0, 5, 10, 15]  # 4 уровня, вдвое меньше прошлого
+    GRAIN_LEVELS = [0, 5, 10, 15]  # 4 уровня grain
 
-    # Итого: 3 фона × 4 grain × 100 = 1200 изображений
+    # Итого: 3 фона × 4 grain × 10 = 120 изображений (тестовая генерация)
 
     print("="*60)
-    print("YOLO DATASET GENERATOR - REAL BACKGROUNDS")
+    print("YOLO DATASET GENERATOR - ЛИНЕЙНОЕ РАЗМЕЩЕНИЕ")
     print("="*60)
     print(f"Фоны: {BACKGROUNDS_DIR}")
     print(f"Объекты: {OBJECTS_DIR}")
     print(f"Выход: {OUTPUT_DIR}")
-    print(f"Параметры: Вариант А")
+    print(f"Режим: Линии с группировкой (тестовый, 10 изображений/комбо)")
     print("="*60)
 
     # Генерация
