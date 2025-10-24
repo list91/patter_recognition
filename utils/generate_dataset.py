@@ -6,6 +6,7 @@
 import os
 import random
 import numpy as np
+import time
 from PIL import Image
 from pathlib import Path
 from scipy.ndimage import gaussian_filter
@@ -476,12 +477,17 @@ def generate_dataset_on_real_backgrounds(backgrounds_dir, objects_dir, output_di
 
     global_idx = 0
     generated_count = 0
+    combo_idx = 0
+    total_combos = len(backgrounds) * len(grain_levels)
+    start_time = time.time()
 
     # Генерация
     for bg_img, bg_name in backgrounds:
         for grain_intensity in grain_levels:
-            print(f"\nФон: {bg_name} | Grain: {grain_intensity}")
+            combo_idx += 1
+            print(f"\n[Комбо {combo_idx}/{total_combos}] Фон: {bg_name} | Grain: {grain_intensity}")
             print(f"-" * 60)
+            combo_start_idx = global_idx
 
             for i in range(images_per_combo):
                 # Формируем имя файла
@@ -522,19 +528,28 @@ def generate_dataset_on_real_backgrounds(backgrounds_dir, objects_dir, output_di
                 generated_count += 1
                 global_idx += 1
 
-                # Лог каждые 10 изображений
-                if (i + 1) % 10 == 0 or (i + 1) <= 5:
-                    progress_pct = ((i + 1) / images_per_combo) * 100
-                    print(f"  [{progress_pct:5.1f}%] {i + 1}/{images_per_combo} | "
-                          f"Объектов: {num_objs:2d}")
+                # Лог каждые 20 изображений
+                if (i + 1) % 20 == 0 or (i + 1) <= 5:
+                    combo_progress_pct = ((i + 1) / images_per_combo) * 100
+                    total_progress_pct = (global_idx / total_images) * 100
+                    print(f"  [Комбо: {combo_progress_pct:5.1f}% | Всего: {total_progress_pct:5.1f}%] "
+                          f"{i + 1}/{images_per_combo} | Объектов: {num_objs:2d}")
 
-            print(f"[OK] Комбинация завершена")
+            combo_generated = global_idx - combo_start_idx
+            elapsed = time.time() - start_time
+            avg_time = elapsed / global_idx if global_idx > 0 else 0
+            eta = avg_time * (total_images - global_idx)
+            print(f"[OK] Комбинация завершена: {combo_generated} изображений | "
+                  f"Всего: {global_idx}/{total_images} | ETA: {eta/60:.1f} мин")
 
+    elapsed_total = time.time() - start_time
     print(f"\n{'='*60}")
     print(f"ГЕНЕРАЦИЯ ЗАВЕРШЕНА!")
     print(f"{'='*60}")
     print(f"Сгенерировано новых изображений: {generated_count}")
     print(f"Всего изображений в train: {global_idx}")
+    print(f"Время генерации: {elapsed_total/60:.1f} минут ({elapsed_total:.0f} сек)")
+    print(f"Скорость: {global_idx/elapsed_total:.2f} изображений/сек")
     print(f"Выходная директория: {output_dir}")
     print(f"{'='*60}\n")
 
@@ -545,13 +560,13 @@ if __name__ == "__main__":
     OBJECTS_DIR = "data/datasets/objects-v2"
     OUTPUT_DIR = "data/yolo_dataset"
 
-    # Параметры генерации (Тестовый режим с линейным размещением)
-    IMAGES_PER_COMBO = 10  # На каждую комбинацию фон+grain (для тестирования)
+    # Параметры генерации (Полный датасет с линейным размещением)
+    IMAGES_PER_COMBO = 167  # На каждую комбинацию фон+grain
     NUM_OBJECTS_RANGE = (5, 15)  # Не используется с новым алгоритмом
     SCALE_RANGE = (0.8, 1.2)
     GRAIN_LEVELS = [0, 5, 10, 15]  # 4 уровня grain
 
-    # Итого: 3 фона × 4 grain × 10 = 120 изображений (тестовая генерация)
+    # Итого: 3 фона × 4 grain × 167 = 2004 изображения
 
     print("="*60)
     print("YOLO DATASET GENERATOR - ЛИНЕЙНОЕ РАЗМЕЩЕНИЕ")
@@ -559,7 +574,8 @@ if __name__ == "__main__":
     print(f"Фоны: {BACKGROUNDS_DIR}")
     print(f"Объекты: {OBJECTS_DIR}")
     print(f"Выход: {OUTPUT_DIR}")
-    print(f"Режим: Линии с группировкой (тестовый, 10 изображений/комбо)")
+    print(f"Режим: Линии с группировкой (~2000 изображений)")
+    print(f"Фич: Удаление белого фона объектов")
     print("="*60)
 
     # Генерация
