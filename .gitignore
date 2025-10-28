@@ -1,6 +1,6 @@
 # Results folder
 results/
-
+data/yolo_dataset/train/
 # Python
 __pycache__/
 *.py[cod]
