@@ -2,7 +2,7 @@ task: detect
 mode: train
 model: runs/detect/scheme_detector/weights/last.pt
 data: data/yolo_dataset/dataset.yaml
-epochs: 100
+epochs: 1000
 time: null
 patience: 20
 batch: 2
