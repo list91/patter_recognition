@@ -47,3 +47,7 @@ nul
 # YOLO Dataset - too large for git
 
 data/yolo_dataset/train/images/
+
+# Telegram Logger progress graphs
+runs/detect/scheme_detector/mAP_progress.png
+runs/detect/scheme_detector/mAP_progress_test.png

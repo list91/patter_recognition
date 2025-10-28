@@ -6,6 +6,7 @@ Optimized for servers with limited RAM (3-4 GB)
 from ultralytics import YOLO
 import torch
 import gc
+import telegram_logger
 
 def main():
     print("="*60)
@@ -38,6 +39,11 @@ def main():
     # Clear memory
     gc.collect()
 
+    # Register Telegram Logger callback
+    print("\n[TELEGRAM LOGGER] Registering callback for epoch updates...")
+    model.add_callback("on_train_epoch_end", telegram_logger.on_epoch_end)
+    print("[TELEGRAM LOGGER] Callback registered successfully!")
+
     print("\nTraining configuration (LOW MEMORY):")
     print("Dataset: data/yolo_dataset/dataset.yaml")
     print("Model: YOLOv8n (nano)")
@@ -45,17 +51,18 @@ def main():
     print("\nOptimized parameters for 3.7GB RAM:")
     print("  - Image size: 1280x1280 (full resolution)")
     print("  - Batch size: 2 (reduced from 8)")
-    print("  - Epochs: 100")
+    print("  - Epochs: 1000")
     print("  - Workers: 1 (reduced from 4)")
     print("  - Cache: False (to save memory)")
     print("  - Dataset: 100% (1200 images)")
     print("  - Device:", device)
+    print("  - Telegram Updates: ENABLED")
     print("="*60 + "\n")
 
     # Train the model with LOW MEMORY settings
     results = model.train(
         data='data/yolo_dataset/dataset.yaml',
-        epochs=100,
+        epochs=1000,
         imgsz=1280,  # FULL RESOLUTION: 1280
         batch=2,  # REDUCED from 8 - critical for memory
         device=device,

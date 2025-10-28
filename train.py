@@ -5,6 +5,7 @@ Optimized for small object detection on scheme/diagram images
 
 from ultralytics import YOLO
 import torch
+import telegram_logger
 
 def main():
     print("="*60)
@@ -36,6 +37,11 @@ def main():
         # You can change to: yolov8s.pt, yolov8m.pt, yolov8l.pt, yolov8x.pt for better accuracy
         model = YOLO('yolov8n.pt')
 
+    # Register Telegram Logger callback
+    print("\n[TELEGRAM LOGGER] Registering callback for epoch updates...")
+    model.add_callback("on_train_epoch_end", telegram_logger.on_epoch_end)
+    print("[TELEGRAM LOGGER] Callback registered successfully!")
+
     print("\nTraining configuration:")
     print("Dataset: data/yolo_dataset/dataset.yaml")
     print("Model: YOLOv8n (nano)")
@@ -43,9 +49,10 @@ def main():
     print("\nTraining parameters:")
     print("  - Image size: 1280x1280")
     print("  - Batch size: 8")
-    print("  - Epochs: 100")
+    print("  - Epochs: 1000")
     print("  - Workers: 4")
     print("  - Device:", device)
+    print("  - Telegram Updates: ENABLED")
     print("="*60 + "\n")
 
     # Train the model
@@ -57,7 +64,7 @@ def main():
     # - resume=True: Continue from last checkpoint if available
     results = model.train(
         data='data/yolo_dataset/dataset.yaml',
-        epochs=100,
+        epochs=1000,
         imgsz=1280,
         batch=8,
         device=device,
